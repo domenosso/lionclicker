@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>Лев-Кликер: Король Саванны</title>
   <link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -13,12 +13,14 @@
       background-size:400% 400%;
       animation:gradientShift 12s ease infinite;
       min-height:100vh;color:#fff;overflow:hidden;position:relative;
+      touch-action: manipulation; /* Отключает зум при двойном тапе */
     }
     @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
     .container{display:flex;height:100vh;padding:15px;gap:15px;flex-wrap:wrap}
     .left-panel,.right-panel{flex:1;min-width:300px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:25px}
     .divider{width:3px;background:linear-gradient(to bottom,transparent,#fff,transparent);border-radius:2px;box-shadow:0 0 15px rgba(255,255,255,.7);opacity:.6}
 
+    /* Кликер — отключаем зум на iPad */
     .click-button{
       width:160px;height:160px;
       background:radial-gradient(circle at 30% 30%,#fff,#ffcc00);
@@ -28,6 +30,8 @@
       display:flex;align-items:center;justify-content:center;
       font-size:56px;font-weight:700;color:#ff4500;
       user-select:none;position:relative;overflow:hidden;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
     .click-button:active{transform:scale(.9)}
 
@@ -38,15 +42,10 @@
       font-size:18px;font-weight:600;cursor:pointer;
       box-shadow:0 8px 20px rgba(255,69,0,.4);
       transition:all .3s ease;position:relative;overflow:hidden;
+      touch-action: manipulation;
     }
     .upgrade-btn:hover:not(:disabled){transform:translateY(-3px);box-shadow:0 12px 25px rgba(255,69,0,.5)}
     .upgrade-btn:disabled{background:#666;cursor:not-allowed;transform:none;box-shadow:none}
-    .upgrade-btn::before{
-      content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
-      background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);
-      transition:.5s;
-    }
-    .upgrade-btn:hover::before{left:100%}
 
     .pet-container{text-align:center;position:relative}
     .pet-image{
@@ -99,6 +98,21 @@
     @keyframes toastIn{to{transform:translateX(0)}}
     @keyframes toastOut{to{transform:translateX(120%);opacity:0}}
 
+    /* АДМИН-ПАНЕЛЬ */
+    .admin-panel{
+      position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,.9);padding:15px;border-radius:15px;
+      box-shadow:0 10px 30px rgba(0,0,0,.5);color:#fff;
+      font-size:14px;z-index:9999;display:none;flex-direction:column;gap:10px;
+      min-width:280px;align-items:center;
+    }
+    .admin-panel input, .admin-panel button{
+      padding:8px 12px;border-radius:8px;border:none;font-size:14px;
+    }
+    .admin-panel input{width:120px;text-align:center}
+    .admin-panel button{background:#ff6b00;color:#fff;cursor:pointer}
+    .admin-panel button:hover{background:#ff4500}
+
     @media (max-width:768px){
       .container{flex-direction:column;padding:10px}
       .divider{display:none}
@@ -107,6 +121,7 @@
       .clicks-display{font-size:32px}
       .pet-title{font-size:24px}
       .pet-upgrade-wrapper{margin-top:15px}
+      .admin-panel{font-size:13px;min-width:240px}
     }
   </style>
 </head>
@@ -147,20 +162,25 @@
   <!-- Тосты -->
   <div class="toast-container" id="toastContainer"></div>
 
+  <!-- АДМИН-ПАНЕЛЬ -->
+  <div class="admin-panel" id="adminPanel">
+    <div style="font-weight:700;color:#ffd700">Админка</div>
+    <div style="display:flex;gap:5px;align-items:center">
+      <input type="number" id="adminCoins" placeholder="Клики" min="0">
+      <button id="addCoinsBtn">Добавить</button>
+    </div>
+    <div style="display:flex;gap:5px;align-items:center">
+      <input type="number" id="adminLevel" placeholder="Уровень" min="0" max="4">
+      <button id="setLevelBtn">Установить</button>
+    </div>
+    <button id="resetBtn" style="background:#ff4444">Сбросить всё</button>
+  </div>
+
   <script>
     // === Данные ===
     let clicks = 0, clickPower = 1, clickUpgradeCost = 100, petLevel = 0;
-
-    const petNames = [
-      "Котёнок",      // 0
-      "Львёнок",      // 1
-      "Лев",          // 2
-      "Мастер-лев",   // 3
-      "Король лев"    // 4
-    ];
-
-    // Цены для перехода: 0→1, 1→2, 2→3, 3→4
-    const petUpgradeCosts = [5000, 15000, 30000, 0]; // 0 на последнем — не используется
+    const petNames = ["Котёнок","Львёнок","Лев","Мастер-лев","Король лев"];
+    const petUpgradeCosts = [500 esen,15000,30000,0]; // 0→1,1→2,2→3,3→4
 
     // === Элементы ===
     const clickBtn = document.getElementById('clickBtn');
@@ -174,8 +194,16 @@
     const upgradePetBtn = document.getElementById('upgradePet');
     const petCostSpan = document.getElementById('petCost');
     const toastContainer = document.getElementById('toastContainer');
+    const adminPanel = document.getElementById('adminPanel');
 
     const SAVE_KEY = 'lionClickerSave';
+
+    // === Проверка админа ===
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAdmin = urlParams.get('admin') === 'true';
+    if (isAdmin) {
+      adminPanel.style.display = 'flex';
+    }
 
     // === Сохранение / Загрузка ===
     function saveGame(){
@@ -188,6 +216,14 @@
         const d=JSON.parse(s);
         clicks=d.clicks||0; clickPower=d.clickPower||1;
         clickUpgradeCost=d.clickUpgradeCost||100; petLevel=d.petLevel||0;
+      }
+    }
+    function resetGame(){
+      if(confirm('Сбросить ВЕСЬ прогресс?')){
+        localStorage.removeItem(SAVE_KEY);
+        clicks = 0; clickPower = 1; clickUpgradeCost = 100; petLevel = 0;
+        updateUI();
+        showToast('Прогресс сброшен!', 'success');
       }
     }
     setInterval(saveGame,2000);
@@ -227,23 +263,9 @@
       setTimeout(()=>petContainer.classList.remove('vibrate'),500);
     }
 
-    // === Команда консоли ===
-    window.addCoins = function(amount) {
-      if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
-        console.error('%cОшибка: addCoins(число) — пример: addCoins(50000)', 'color: red; font-weight: bold;');
-        return false;
-      }
-      clicks += amount;
-      updateUI(); saveGame();
-      showToast(`+${amount.toLocaleString('ru-RU')} кликов!`, 'success');
-      console.log(`%cДобавлено ${amount.toLocaleString()} кликов! Всего: ${clicks.toLocaleString()}`, 'color: #4ade80; font-weight: bold;');
-      return true;
-    };
-
     // === Клик ===
     clickBtn.addEventListener('click',()=>{
       clicks+=clickPower; updateUI(); saveGame();
-
       const f=document.createElement('div');
       f.textContent=`+${clickPower}`;
       f.style.cssText=`position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
@@ -281,6 +303,29 @@
         showToast(msg,'success');
       }else showToast('Недостаточно кликов!', 'error');
     });
+
+    // === АДМИНКА ===
+    if (isAdmin) {
+      document.getElementById('addCoinsBtn').addEventListener('click', () => {
+        const val = parseInt(document.getElementById('adminCoins').value);
+        if (val > 0) {
+          clicks += val;
+          updateUI(); saveGame();
+          showToast(`+${val.toLocaleString()} кликов!`, 'success');
+        }
+      });
+
+      document.getElementById('setLevelBtn').addEventListener('click', () => {
+        const val = parseInt(document.getElementById('adminLevel').value);
+        if (val >= 0 && val <= 4) {
+          petLevel = val;
+          updateUI(); saveGame();
+          showToast(`Уровень установлен: ${petLevel}`, 'success');
+        }
+      });
+
+      document.getElementById('resetBtn').addEventListener('click', resetGame);
+    }
 
     // === Инициализация ===
     loadGame(); updateUI();
