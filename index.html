@@ -13,39 +13,41 @@
       background-size:400% 400%;
       animation:gradientShift 12s ease infinite;
       min-height:100vh;color:#fff;overflow:hidden;position:relative;
-      touch-action: manipulation; /* Отключает зум при двойном тапе */
     }
     @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
     .container{display:flex;height:100vh;padding:15px;gap:15px;flex-wrap:wrap}
     .left-panel,.right-panel{flex:1;min-width:300px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:25px}
     .divider{width:3px;background:linear-gradient(to bottom,transparent,#fff,transparent);border-radius:2px;box-shadow:0 0 15px rgba(255,255,255,.7);opacity:.6}
 
-    /* Кликер — отключаем зум на iPad */
+    /* КЛИКЕР — КРИТИЧНО ДЛЯ iOS */
     .click-button{
       width:160px;height:160px;
       background:radial-gradient(circle at 30% 30%,#fff,#ffcc00);
       border:6px solid #ff6b00;border-radius:50%;
-      cursor:pointer;transition:all .15s ease;
+      transition:all .15s ease;
       box-shadow:0 12px 25px rgba(0,0,0,.3);
       display:flex;align-items:center;justify-content:center;
       font-size:56px;font-weight:700;color:#ff4500;
       user-select:none;position:relative;overflow:hidden;
-      touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
+      /* Убираем cursor и touch-action — мешают iOS */
     }
-    .click-button:active{transform:scale(.9)}
+    .click-button:active{
+      transform:scale(.9);
+      box-shadow:0 6px 15px rgba(0,0,0,.4);
+    }
 
     .clicks-display{font-size:38px;font-weight:700;text-shadow:0 3px 8px rgba(0,0,0,.4);letter-spacing:1px}
     .upgrade-btn{
       padding:14px 32px;background:linear-gradient(45deg,#ff4500,#ff6b00);
       color:#fff;border:none;border-radius:50px;
-      font-size:18px;font-weight:600;cursor:pointer;
+      font-size:18px;font-weight:600;
       box-shadow:0 8px 20px rgba(255,69,0,.4);
       transition:all .3s ease;position:relative;overflow:hidden;
-      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
     .upgrade-btn:hover:not(:disabled){transform:translateY(-3px);box-shadow:0 12px 25px rgba(255,69,0,.5)}
-    .upgrade-btn:disabled{background:#666;cursor:not-allowed;transform:none;box-shadow:none}
+    .upgrade-btn:disabled{background:#666;transform:none;box-shadow:none}
 
     .pet-container{text-align:center;position:relative}
     .pet-image{
@@ -180,7 +182,7 @@
     // === Данные ===
     let clicks = 0, clickPower = 1, clickUpgradeCost = 100, petLevel = 0;
     const petNames = ["Котёнок","Львёнок","Лев","Мастер-лев","Король лев"];
-    const petUpgradeCosts = [500 esen,15000,30000,0]; // 0→1,1→2,2→3,3→4
+    const petUpgradeCosts = [5000,15000,30000,0];
 
     // === Элементы ===
     const clickBtn = document.getElementById('clickBtn');
@@ -201,9 +203,7 @@
     // === Проверка админа ===
     const urlParams = new URLSearchParams(window.location.search);
     const isAdmin = urlParams.get('admin') === 'true';
-    if (isAdmin) {
-      adminPanel.style.display = 'flex';
-    }
+    if (isAdmin) adminPanel.style.display = 'flex';
 
     // === Сохранение / Загрузка ===
     function saveGame(){
@@ -263,22 +263,38 @@
       setTimeout(()=>petContainer.classList.remove('vibrate'),500);
     }
 
-    // === Клик ===
-    clickBtn.addEventListener('click',()=>{
-      clicks+=clickPower; updateUI(); saveGame();
-      const f=document.createElement('div');
-      f.textContent=`+${clickPower}`;
-      f.style.cssText=`position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    // === КЛИК — РАБОТАЕТ НА iOS ===
+    function handleClick() {
+      clicks += clickPower;
+      updateUI();
+      saveGame();
+
+      // Плавающее число
+      const f = document.createElement('div');
+      f.textContent = `+${clickPower}`;
+      f.style.cssText = `position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
         font-weight:bold;font-size:36px;color:#fff;text-shadow:0 0 10px #ff4500;
         pointer-events:none;animation:floatUp 1s ease-out forwards;z-index:10;`;
-      clickBtn.appendChild(f); setTimeout(()=>f.remove(),1000);
+      clickBtn.appendChild(f);
+      setTimeout(() => f.remove(), 1000);
 
-      const r=document.createElement('div');
-      r.style.cssText=`position:absolute;border-radius:50%;background:rgba(255,255,255,.6);
+      // Волна
+      const r = document.createElement('div');
+      r.style.cssText = `position:absolute;border-radius:50%;background:rgba(255,255,255,.6);
         transform:scale(0);animation:ripple .6s ease-out;width:100px;height:100px;
         left:50%;top:50%;margin-left:-50px;margin-top:-50px;pointer-events:none;`;
-      clickBtn.appendChild(r); setTimeout(()=>r.remove(),600);
-    });
+      clickBtn.appendChild(r);
+      setTimeout(() => r.remove(), 600);
+    }
+
+    // iOS: touchstart + preventDefault
+    clickBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      handleClick();
+    }, { passive: false });
+
+    // Все устройства: click
+    clickBtn.addEventListener('click', handleClick);
 
     // === Улучшения ===
     upgradeClickBtn.addEventListener('click',()=>{
@@ -320,7 +336,7 @@
         if (val >= 0 && val <= 4) {
           petLevel = val;
           updateUI(); saveGame();
-          showToast(`Уровень установлен: ${petLevel}`, 'success');
+          showToast(`Уровень: ${petLevel}`, 'success');
         }
       });
 
@@ -331,8 +347,8 @@
     loadGame(); updateUI();
 
     // Анимации
-    const s=document.createElement('style');
-    s.textContent=`
+    const s = document.createElement('style');
+    s.textContent = `
       @keyframes floatUp{to{transform:translate(-50%,-150%);opacity:0}}
       @keyframes ripple{to{transform:scale(2);opacity:0}}
     `;
